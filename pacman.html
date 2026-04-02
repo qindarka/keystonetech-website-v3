@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Keystone Pac-Man — Eat the Pellets!</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: linear-gradient(135deg, #004876 0%, #001a2e 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Arial', sans-serif;
+      overflow: hidden;
+    }
+
+    .game-container {
+      text-align: center;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      border-radius: 20px;
+      border: 3px solid #ffb819;
+      box-shadow: 0 0 40px rgba(255, 184, 25, 0.3);
+    }
+
+    h1 {
+      color: #ffb819;
+      margin-bottom: 10px;
+      font-size: 2.5rem;
+      text-shadow: 0 0 10px rgba(255, 184, 25, 0.5);
+    }
+
+    .subtitle {
+      color: #00d4ff;
+      margin-bottom: 30px;
+      font-size: 1.1rem;
+    }
+
+    #gameCanvas {
+      border: 3px solid #ffb819;
+      background: #000;
+      display: block;
+      margin: 0 auto 20px;
+      image-rendering: pixelated;
+      cursor: none;
+    }
+
+    .controls {
+      color: #f0f0f0;
+      margin-top: 20px;
+      font-size: 1rem;
+    }
+
+    .control-keys {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+
+    .key {
+      background: #ffb819;
+      color: #000;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 0.9rem;
+    }
+
+    .stats {
+      display: flex;
+      gap: 30px;
+      justify-content: center;
+      margin-top: 20px;
+      color: #00d4ff;
+      font-size: 1rem;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      color: #ffb819;
+      font-weight: bold;
+    }
+
+    .back-link {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: #ffb819;
+      text-decoration: none;
+      font-weight: bold;
+      transition: color 0.3s;
+    }
+
+    .back-link:hover {
+      color: #00d4ff;
+    }
+
+    @media (max-width: 768px) {
+      .game-container {
+        padding: 20px;
+      }
+
+      h1 {
+        font-size: 1.8rem;
+      }
+
+      #gameCanvas {
+        max-width: 100%;
+        height: auto;
+      }
+
+      .stats {
+        flex-direction: column;
+        gap: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<a href="index.html" class="back-link">← Back to Keystone</a>
+
+<div class="game-container">
+  <h1>🎮 Keystone Pac-Man</h1>
+  <p class="subtitle">Guide the Keystone orange through the maze!</p>
+  
+  <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+  <div class="controls">
+    <p><strong>Use arrow keys to move</strong></p>
+    <div class="control-keys">
+      <span class="key">↑ UP</span>
+      <span class="key">← LEFT</span>
+      <span class="key">↓ DOWN</span>
+      <span class="key">→ RIGHT</span>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat-item">
+      <span>Score</span>
+      <span class="stat-value" id="score">0</span>
+    </div>
+    <div class="stat-item">
+      <span>Pellets Left</span>
+      <span class="stat-value" id="pelletsLeft">0</span>
+    </div>
+    <div class="stat-item">
+      <span>Game Status</span>
+      <span class="stat-value" id="status">Running</span>
+    </div>
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  
+  const TILE_SIZE = 20;
+  const COLS = canvas.width / TILE_SIZE;
+  const ROWS = canvas.height / TILE_SIZE;
+  
+  // Game variables
+  let score = 0;
+  let pelletsEaten = 0;
+  let gameActive = true;
+
+  // Player (orange Keystone color)
+  let player = {
+    x: 1,
+    y: 1,
+    dx: 0,
+    dy: 0,
+    nextDx: 0,
+    nextDy: 0,
+    size: 0.8
+  };
+
+  // Maze (0 = path, 1 = wall)
+  const maze = [
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,1,1,0,1,1,1,1,0,0,1,1,1,1,0,1,1,0,1],
+    [1,0,1,1,0,1,1,1,1,0,0,1,1,1,1,0,1,1,0,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,1,1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,0,1],
+    [1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,1],
+    [1,1,1,1,0,1,1,1,1,0,0,1,1,1,1,0,1,1,1,1],
+    [1,1,1,1,0,1,0,0,0,0,0,0,0,0,1,0,1,1,1,1],
+    [1,1,1,1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,1,1],
+    [0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0],
+    [1,1,1,1,0,1,0,1,1,1,1,1,1,0,1,0,1,1,1,1],
+    [1,1,1,1,0,1,0,0,0,0,0,0,0,0,1,0,1,1,1,1],
+    [1,1,1,1,0,1,0,1,1,1,1,1,1,1,1,0,1,1,1,1],
+    [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+    [1,0,1,1,0,1,1,1,1,0,0,1,1,1,1,0,1,1,0,1],
+    [1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+    [1,1,0,1,0,1,0,1,1,1,1,1,1,0,1,0,1,0,1,1],
+    [1,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,1],
+    [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  ];
+
+  // Create pellets array
+  let pellets = [];
+  function initPellets() {
+    pellets = [];
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (maze[y][x] === 0 && !(x === 1 && y === 1)) {
+          pellets.push({ x, y, eaten: false });
+        }
+      }
+    }
+    updateStats();
+  }
+
+  function updateStats() {
+    document.getElementById('score').textContent = score;
+    document.getElementById('pelletsLeft').textContent = pellets.filter(p => !p.eaten).length;
+  }
+
+  // Keyboard input
+  const keys = {};
+  window.addEventListener('keydown', (e) => {
+    keys[e.key] = true;
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    keys[e.key] = false;
+  });
+
+  function handleInput() {
+    if (keys['ArrowUp'] || keys['w']) player.nextDy = -1, player.nextDx = 0;
+    if (keys['ArrowDown'] || keys['s']) player.nextDy = 1, player.nextDx = 0;
+    if (keys['ArrowLeft'] || keys['a']) player.nextDx = -1, player.nextDy = 0;
+    if (keys['ArrowRight'] || keys['d']) player.nextDx = 1, player.nextDy = 0;
+  }
+
+  function canMove(x, y) {
+    if (x < 0 || x >= COLS || y < 0 || y >= ROWS) return false;
+    return maze[Math.floor(y)][Math.floor(x)] === 0;
+  }
+
+  function updateGame() {
+    handleInput();
+
+    // Try to move in next direction
+    if (player.nextDx !== 0 || player.nextDy !== 0) {
+      if (canMove(player.x + player.nextDx, player.y + player.nextDy)) {
+        player.dx = player.nextDx;
+        player.dy = player.nextDy;
+      }
+    }
+
+    // Move player
+    const newX = player.x + player.dx * 0.1;
+    const newY = player.y + player.dy * 0.1;
+
+    if (canMove(newX, newY)) {
+      player.x = newX;
+      player.y = newY;
+    }
+
+    // Check pellet collision
+    pellets.forEach(pellet => {
+      if (!pellet.eaten) {
+        const dist = Math.hypot(player.x - pellet.x, player.y - pellet.y);
+        if (dist < 0.5) {
+          pellet.eaten = true;
+          score += 10;
+          updateStats();
+        }
+      }
+    });
+
+    // Check win condition
+    if (pellets.every(p => p.eaten)) {
+      gameActive = false;
+      document.getElementById('status').textContent = 'You Won! 🎉';
+    }
+  }
+
+  function drawGame() {
+    // Clear canvas
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Draw maze
+    ctx.fillStyle = '#004876';
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (maze[y][x] === 1) {
+          ctx.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+      }
+    }
+
+    // Draw pellets
+    ctx.fillStyle = '#ffb819';
+    pellets.forEach(pellet => {
+      if (!pellet.eaten) {
+        ctx.beginPath();
+        ctx.arc(
+          pellet.x * TILE_SIZE + TILE_SIZE / 2,
+          pellet.y * TILE_SIZE + TILE_SIZE / 2,
+          2,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      }
+    });
+
+    // Draw player (orange circle with Keystone vibe)
+    ctx.fillStyle = '#ffb819';
+    ctx.beginPath();
+    ctx.arc(
+      player.x * TILE_SIZE + TILE_SIZE / 2,
+      player.y * TILE_SIZE + TILE_SIZE / 2,
+      TILE_SIZE / 2.5,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+
+    // Draw eye direction
+    const eyeX = player.x * TILE_SIZE + TILE_SIZE / 2 + (player.dx * 3);
+    const eyeY = player.y * TILE_SIZE + TILE_SIZE / 2 + (player.dy * 3);
+    ctx.fillStyle = '#004876';
+    ctx.beginPath();
+    ctx.arc(eyeX, eyeY, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function gameLoop() {
+    if (gameActive) {
+      updateGame();
+    }
+    drawGame();
+    requestAnimationFrame(gameLoop);
+  }
+
+  // Initialize and start
+  initPellets();
+  gameLoop();
+</script>
+
+</body>
+</html>
